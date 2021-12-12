@@ -7,12 +7,11 @@ import (
 	"log"
 	"net"
 	"reflect"
+	"rpc-go/pkg/option"
 	"sync"
 
 	"rpc-go/pkg/codec"
 )
-
-const MagicNumber = 0x237658
 
 // Server is rpc server
 type Server struct{}
@@ -23,19 +22,6 @@ func NewServer() *Server {
 
 // DefaultServer is a default server for user to use.
 var DefaultServer = NewServer()
-
-// Option is used when client and server negotiate what codec to use.
-type Option struct {
-	// MagicNumber marks this is a rpc call
-	MagicNumber int
-	// CodecType specify which codec to encode and decode
-	CodecType codec.Type
-}
-
-var DefaultOption = &Option{
-	MagicNumber: MagicNumber,
-	CodecType:   codec.GobType,
-}
 
 // invalidRequest is sent when error occurs.
 var invalidRequest = struct{}{}
@@ -63,7 +49,7 @@ func (s *Server) ServeConn(conn io.ReadWriteCloser) {
 		_ = conn.Close()
 	}()
 
-	var opt Option
+	var opt option.Option
 	// use json here because we need to get concrete codec first
 	if err := json.NewDecoder(conn).Decode(&opt); err != nil {
 		log.Printf("rpc server: invalid magic number %x", opt.MagicNumber)
@@ -132,8 +118,8 @@ func (s *Server) readRequestHeader(cc codec.Codec) (*codec.Header, error) {
 
 func (s *Server) handleRequest(cc codec.Codec, req *request, mutex *sync.Mutex, wg *sync.WaitGroup) {
 	defer wg.Done()
-	log.Println("***",req.header, req.body.Elem())
-	req.replyBody = reflect.ValueOf(fmt.Sprintf("received rpc call %d", req.header.Seq))
+	log.Println("***", req.header, req.body.Elem())
+	req.replyBody = reflect.ValueOf(fmt.Sprintf("received rpc call %d,method %s", req.header.Seq, req.header.ServerMethod))
 	s.sendResponse(cc, req.header, req.replyBody.Interface(), mutex)
 }
 

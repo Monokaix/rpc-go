@@ -1,12 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
-	"rpc-go/pkg/codec"
+	"rpc-go/pkg/client"
 	"rpc-go/pkg/server"
+	"sync"
 	"time"
 )
 
@@ -14,26 +14,30 @@ func main() {
 	addr := make(chan string)
 	go startServer(addr)
 
-	conn, _ := net.Dial("tcp", <-addr)
+	client, err := client.Dial("tcp", <-addr)
+	if err != nil {
+		log.Fatalln("dial err:", err)
+	}
 	defer func() {
-		_ = conn.Close()
+		_ = client.Close()
 	}()
 
 	time.Sleep(time.Second)
-	// send option
-	_ = json.NewEncoder(conn).Encode(server.DefaultOption)
-	cc := codec.NewGobCodec(conn)
-	for i := 0; i < 5; i++ {
-		h := &codec.Header{Seq: uint64(i), ServerMethod: "foo-bar"}
-		_ = cc.Write(h, fmt.Sprintf("rpc req code %d", h.Seq))
-		_ = cc.ReadHeader(h)
-		// header should be not modified because server doesn't change anything.
-		//fmt.Println("",h)
-		var reply string
-		_ = cc.ReadBody(&reply)
-		fmt.Println("reply:", reply)
-	}
 
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			args := fmt.Sprintf("rpc req %d", i)
+			var reply string
+			if err := client.Call("foo.bar", args, &reply); err != nil {
+				log.Fatalln("call foo.bar error:", err)
+			}
+			log.Println("reply:", reply)
+		}(i)
+	}
+	wg.Wait()
 }
 
 func startServer(addr chan string) {
