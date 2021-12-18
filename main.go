@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"rpc-go/pkg/client"
@@ -9,6 +8,15 @@ import (
 	"sync"
 	"time"
 )
+
+type Foo int
+
+type Args struct{ Num1, Num2 int }
+
+func (f Foo) Sum(args Args, reply *int) error {
+	*reply = args.Num1 + args.Num2
+	return nil
+}
 
 func main() {
 	addr := make(chan string)
@@ -29,18 +37,26 @@ func main() {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			args := fmt.Sprintf("rpc req %d", i)
-			var reply string
-			if err := client.Call("foo.bar", args, &reply); err != nil {
-				log.Fatalln("call foo.bar error:", err)
+			args := &Args{
+				Num1: i,
+				Num2: i * i,
 			}
-			log.Println("reply:", reply)
+			var reply int
+			if err := client.Call("Foo.Sum", args, &reply); err != nil {
+				log.Fatalln("call Foo.Sum error:", err)
+			}
+			log.Printf("%d + %d = %d", args.Num1, args.Num2, reply)
 		}(i)
 	}
 	wg.Wait()
 }
 
 func startServer(addr chan string) {
+	var foo Foo
+	if err := server.Registry(&foo); err != nil {
+		log.Fatal("register error:", err)
+	}
+
 	l, err := net.Listen("tcp", ":0")
 	if err != nil {
 		log.Fatalln("listen err", err)
